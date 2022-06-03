@@ -10,7 +10,8 @@ class KCentersOutliers
 {
 private:
     float* P;
-    int n, dims;
+    int n, dims, arrColumns;
+    void buildSquaredDistanceArray(float* squaredDistances);
 public:
     KCentersOutliers();
     ~KCentersOutliers();

@@ -16,6 +16,7 @@ int main(int argc, char *argv[])
     
     KCentersOutliers kc;
     kc.loadDataset(argv[1]);
+    kc.SeqWeightedOutliers(k,z,0.);
     //kc.~KCentersOutliers();
 
     
