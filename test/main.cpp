@@ -14,8 +14,10 @@ int main(int argc, char *argv[])
     if (isdigit(*argv[3]))
         z = stof(argv[3]);
     
+
     KCentersOutliers kc;
     kc.loadDataset(argv[1]);
+    kc.genUnitWeights();
     kc.SeqWeightedOutliers(k,z,0.);
     //kc.~KCentersOutliers();
 

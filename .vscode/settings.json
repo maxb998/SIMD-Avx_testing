@@ -3,7 +3,7 @@
         "args": [
             "../../datasets/testdataHW2.txt",
             "3",
-            "3"
+            "0"
         ]
     },
     "files.associations": {

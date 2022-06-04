@@ -11,6 +11,8 @@ KCentersOutliers::KCentersOutliers()
 KCentersOutliers::~KCentersOutliers()
 {
     free(P);
+    free(W);
+    free(S);
 }
 
 bool KCentersOutliers::loadDataset(char *filename)
@@ -49,7 +51,7 @@ bool KCentersOutliers::loadDataset(char *filename)
         size_t first_separator = 0, second_separator = str.find(',');   // assumes there are no random commas at the start of any line in the database
         for (int j = 0; j < dims; j++)
         {
-            P[i + j * n] = stof(str.substr(first_separator, second_separator-first_separator));
+            P[i + j * arrColumns] = stof(str.substr(first_separator, second_separator-first_separator));
             first_separator = second_separator+1;
             second_separator = str.find(',', second_separator);
         }
@@ -57,51 +59,123 @@ bool KCentersOutliers::loadDataset(char *filename)
     
     fclose(f);
 
-    /*/// code to print array -> DEBUG
-    for (int i = 0; i < n; i++)
+    for (int i = n; i < arrColumns; i++)
+        for (int j = 0; j < dims; j++)
+            P[i + j * arrColumns] = nanf("");
+    
+
+    /*// DEBUG -> code to print array
+    for (int i = 0; i < arrColumns; i++)
     {
         for (int j = 0; j < dims; j++)
-            cout << P[i + j*n] << "; ";
+            cout << P[i + j * arrColumns] << "; ";
         cout << endl;
-    }*/
+    }// */
 
     return true;
 }
 
+void KCentersOutliers::loadWeights(int *weights)
+{
+    if (n != 0)
+    {
+        W = (int*)aligned_alloc(32, sizeof(int) * arrColumns);
+    }
+    else
+        cout << "You must load the dataset before setting the weights" << endl;
+}
 
-vector<float*> KCentersOutliers::SeqWeightedOutliers(int k, int z, float alpha)
+void KCentersOutliers::genUnitWeights()
+{
+    if (n != 0)
+    {
+        W = (int*)aligned_alloc(32, sizeof(int) * arrColumns);
+        fill(&W[0], &W[n], 1);
+        if (n < arrColumns)
+            fill(&W[n], &W[arrColumns], 0);  
+    }
+    else
+        cout << "you must load the dataset before setting the weights" << endl;
+}
+
+
+void KCentersOutliers::SeqWeightedOutliers(int k, int z, float alpha)
 {
     int attempt = 0;
-
-    
     
     // squared distance array allocation
-    float* all_dist_squared = (float*)aligned_alloc(32, sizeof(float) * (arrColumns^2));
-    buildSquaredDistanceArray(all_dist_squared);
-    for (int i = 0; i < arrColumns; i++)
+    float* allDistSquared = (float*)aligned_alloc(32, sizeof(float) * arrColumns * n);
+    buildSquaredDistanceArray(allDistSquared);
+    
+    float rSquared = findMinDistFirstPts(allDistSquared, z + k + 1) / 16.;
+    float firstGuess = sqrt(rSquared*4.);
+    cout << firstGuess << endl;
+    
+
+    int outliersW = n;
+    S = (float*)aligned_alloc(32, k * dims * sizeof(float));
+    int *iterW = (int*)aligned_alloc(32, arrColumns*sizeof(int));
+    do
     {
-        for (int j = 0; j < arrColumns; j++)
-            cout << all_dist_squared[i*arrColumns + j] << "; ";
-        cout << "\b\b" << endl;
+        attempt++;
+        rSquared *= 4.;
+
+        /*cout << "attempt n°: " << attempt << endl;
+        cout << "radius = " << rSquared << endl;*/
+
+        fill(S, &S[k * dims], nanf(""));
+        
+        copy(W, &W[arrColumns], iterW);
+
+        for (int center = 0; center < k; center++)
+        {
+            float ballRadiusSquared = (1.+2.*alpha)*(1.+2.*alpha)*rSquared;
+
+            // find next candidate for the given radius
+            int bestPtId = findNextCenterId(allDistSquared, iterW, ballRadiusSquared);
+
+            // save candidate into solution array
+            for (int i = 0; i < dims; i++)
+                S[center + i * k] = P[bestPtId + i * arrColumns];
+
+            // set newly covered points weight in iterW to 0
+            ballRadiusSquared = (3.+4.*alpha)*(3.+4.*alpha)*rSquared;
+            setNewCenterPtsCovered(allDistSquared, iterW, ballRadiusSquared, bestPtId);
+
+            if (attempt == 6)
+            {
+                for (int i = 0; i < arrColumns; i++)
+                    cout << iterW[i] << ";  ";
+                cout << endl;
+            }
+            
+        }
+
+        // compute outliers weight
+        __m256i vecSum = _mm256_set1_epi32(0);
+        for (int i = 0; i < n; i += 8)
+            vecSum = _mm256_add_epi32(vecSum, (__m256i)_mm256_load_ps((float*)&iterW[i]));
+        int *arrSum = (int*)&vecSum;
+        outliersW = 0;
+        for (int i = 0; i < 8; i++)
+            outliersW += arrSum[i];
+        
+    } while (outliersW > z);
+
+    for (int i = 0; i < k; i++)
+    {
+        for (int j = 0; j < dims; j++)
+            cout << S[i + j * k] << ";  ";
+        cout << endl;
     }
     
     
-
-    // begin filling up squared distance array
-
-
-
-
-    free(all_dist_squared);
-
-    vector<float*> temp;
-    return temp;
+    free(iterW);
+    free(allDistSquared);
 }
 
-void KCentersOutliers::buildSquaredDistanceArray(float* all_dist_squared)
+void KCentersOutliers::buildSquaredDistanceArray(float* allDistSquared)
 {
-    float* last = (float*)aligned_alloc(32, 8 * sizeof(float));
-
     // begin filling array by 8 points at a time
     for (int i = 0; i < n; i++)
     {
@@ -110,23 +184,76 @@ void KCentersOutliers::buildSquaredDistanceArray(float* all_dist_squared)
             __m256 squaredSum = _mm256_setzero_ps();
             for (int l = 0; l < dims; l++)
             {
-                __m256 diml_8pts = _mm256_load_ps(&P[j + l * arrColumns]);
-                //if (i >= 13)
-                    cout << i << endl;
-                __m256 diml_currentPt = _mm256_set1_ps(P[i + l * arrColumns]);
-                __m256 difference = _mm256_sub_ps(diml_8pts, diml_currentPt);
+                __m256 difference = _mm256_sub_ps(_mm256_set1_ps(P[i + l * arrColumns]), _mm256_load_ps(&P[j + l * arrColumns]));
                 difference = _mm256_mul_ps(difference, difference);
                 squaredSum = _mm256_add_ps(squaredSum, difference);
             }
             float* vecOpResult = (float*)&squaredSum;
-            int currentPos = i * arrColumns + j;
-            for (int l = 0; l < 8; l++)
-            {
-                all_dist_squared[currentPos + l] = vecOpResult[l];
-                //cout << "(" << currentPos << ", " << l << ");     ";
-            }
-            //cout << endl;
+            copy(vecOpResult, &vecOpResult[8], &allDistSquared[i * arrColumns + j]);
         }
     }
-    free(last);
+    
+    /*//print allDistSquared
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j < arrColumns; j++)
+            cout << allDistSquared[i*arrColumns + j] << ",";
+        cout << "\b\b" << endl;
+    }*/
+}
+
+float KCentersOutliers::findMinDistFirstPts(float* allDistSquared, int limitFirstPts)
+{
+    int limit = limitFirstPts;
+    if (limit > n)
+        limit = n;
+
+    float min = allDistSquared[1];
+    for (int i = 0; i < limit; i++)
+        for (int j = i+1; j < limit; j++)
+            if (allDistSquared[i * arrColumns + j] < min)
+                min = allDistSquared[i * arrColumns + j];
+    return min;
+}
+
+int KCentersOutliers::findNextCenterId(float *allDistSquared, int *iterW, float ballRadiusSquared)
+{
+    int bestPtId = -1, bestWConcentration = 0;
+    for (int ptId = 0; ptId < n; ptId++)
+    {
+        if (iterW[ptId] == 0)  continue;    // if the point has already been covered skip to the next one
+
+        // compute weight around current point
+        __m256i wSum = _mm256_set1_epi32(0);
+        for (int i = 0; i < n; i += 8)
+        {
+            __m256i mask = (__m256i)_mm256_cmp_ps(_mm256_load_ps(&allDistSquared[ptId * arrColumns + i]), _mm256_set1_ps(ballRadiusSquared), _CMP_LT_OS);
+            wSum = _mm256_add_epi32(_mm256_maskload_epi32(&iterW[i], mask), wSum);
+        }
+
+        int *wSumResult = (int *)&wSum, currentW = 0;
+        for (int i = 0; i < 8; i++)
+            currentW += wSumResult[i];
+
+        if (currentW > bestWConcentration)
+        {
+            bestWConcentration = currentW;
+            bestPtId = ptId;
+        }
+    }
+    return bestPtId;
+}
+
+void KCentersOutliers::setNewCenterPtsCovered(float *allDistSquared, int *iterW, float ballRadiusSquared, int newCenterId)
+{
+    for (int i = 0; i < n; i += 8)
+    {
+        __m256i mask = (__m256i)_mm256_cmp_ps(_mm256_load_ps(&allDistSquared[newCenterId * arrColumns + i]), _mm256_set1_ps(ballRadiusSquared), _CMP_LT_OS);
+        mask = _mm256_andnot_si256(mask, _mm256_set1_epi32(-1));
+        __m256i loaded = _mm256_maskload_epi32(&iterW[i], mask);
+
+        // store result into iterW
+        int *loadedCast = (int *)&loaded;
+        copy(loadedCast, &loadedCast[8], &iterW[i]);
+    }
 }
