@@ -188,18 +188,19 @@ void KCentersOutliers::buildSquaredDistanceArray(float* allDistSquared)
                 difference = _mm256_mul_ps(difference, difference);
                 squaredSum = _mm256_add_ps(squaredSum, difference);
             }
-            float* vecOpResult = (float*)&squaredSum;
-            copy(vecOpResult, &vecOpResult[8], &allDistSquared[i * arrColumns + j]);
+            _mm256_store_ps(&allDistSquared[i * arrColumns + j], squaredSum);
+            /*float* vecOpResult = (float*)&squaredSum;
+            copy(vecOpResult, &vecOpResult[8], &allDistSquared[i * arrColumns + j]);*/
         }
     }
     
-    /*//print allDistSquared
+    ///print allDistSquared
     for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < arrColumns; j++)
             cout << allDistSquared[i*arrColumns + j] << ",";
         cout << "\b\b" << endl;
-    }*/
+    }// */
 }
 
 float KCentersOutliers::findMinDistFirstPts(float* allDistSquared, int limitFirstPts)
@@ -218,7 +219,8 @@ float KCentersOutliers::findMinDistFirstPts(float* allDistSquared, int limitFirs
 
 int KCentersOutliers::findNextCenterId(float *allDistSquared, int *iterW, float ballRadiusSquared)
 {
-    int bestPtId = -1, bestWConcentration = 0;
+    int *wSumResult = (int*)aligned_alloc(32, sizeof(int) * 8);
+    int bestPtId = -1, bestWConcentration = 0, currentW = 0;
     for (int ptId = 0; ptId < n; ptId++)
     {
         if (iterW[ptId] == 0)  continue;    // if the point has already been covered skip to the next one
@@ -231,7 +233,8 @@ int KCentersOutliers::findNextCenterId(float *allDistSquared, int *iterW, float 
             wSum = _mm256_add_epi32(_mm256_maskload_epi32(&iterW[i], mask), wSum);
         }
 
-        int *wSumResult = (int *)&wSum, currentW = 0;
+        _mm256_store_si256((__m256i*)wSumResult, wSum);
+        currentW = 0;
         for (int i = 0; i < 8; i++)
             currentW += wSumResult[i];
 
@@ -241,6 +244,7 @@ int KCentersOutliers::findNextCenterId(float *allDistSquared, int *iterW, float 
             bestPtId = ptId;
         }
     }
+    free(wSumResult);
     return bestPtId;
 }
 
@@ -253,7 +257,8 @@ void KCentersOutliers::setNewCenterPtsCovered(float *allDistSquared, int *iterW,
         __m256i loaded = _mm256_maskload_epi32(&iterW[i], mask);
 
         // store result into iterW
-        int *loadedCast = (int *)&loaded;
-        copy(loadedCast, &loadedCast[8], &iterW[i]);
+        _mm256_store_si256((__m256i*)&iterW[i], loaded);
+        /*int *loadedCast = (int *)&loaded;
+        copy(loadedCast, &loadedCast[8], &iterW[i]);*/
     }
 }
