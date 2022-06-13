@@ -1,7 +1,7 @@
 {
     "cmake.debugConfig": {
         "args": [
-            "../../datasets/testdataHW2.txt",
+            "../../../datasets/testdataHW2.txt",
             "3",
             "0"
         ]
@@ -58,6 +58,7 @@
         "stdexcept": "cpp",
         "streambuf": "cpp",
         "cinttypes": "cpp",
-        "typeinfo": "cpp"
+        "typeinfo": "cpp",
+        "kcentersoutliers.h": "c"
     }
 }
