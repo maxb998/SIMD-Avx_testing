@@ -1,14 +1,31 @@
-#ifndef KCENTERS_OUTLIERS_HPP
-#define KCENTERS_OUTLIERS_HPP
+#ifndef KCENTERS_OUTLIERS_H
+#define KCENTERS_OUTLIERS_H
 
 #include <immintrin.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 
-const int simdVecSize = 8;
-float * loadDataset(char *path, int *n, int *dims);
-void seqWeightedOutliers(float *points, int n, int dims, int k, int z, float alpha);
-void fillDistanceMatrixRow(float *points, int n, int dims, float *pt, float *distSquaredOut, int pos);
+typedef struct kCentersData
+{
+    float * P;
+    int * W;
+    int n, dims, fullNSize;
+} kCentersData ;
+
+typedef struct kCentersSolution
+{
+    float * S;
+    int k, dims, fullKSize;
+} kCentersSolution ;
+
+kCentersData loadDataset(char * path);
+kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alpha);
+float * computeDistanceMatrix(kCentersData data);
+float firstGuess(float * distances, int n, int dims, int ptToUse);
+
+void printMatrix(float * matr, int n, int m, bool isSimdOptimized);
 
 
-#endif // KCENTERS_OUTLIERS_HPP
+#endif // KCENTERS_OUTLIERS_H

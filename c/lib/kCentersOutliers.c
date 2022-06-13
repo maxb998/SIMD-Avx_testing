@@ -1,49 +1,133 @@
 #include "kCentersOutliers.h"
 
+const int simdVecSize = 8, simdAllignment = 32;
 
-float * loadDataset(char *path, int *n, int *dims)
+kCentersData loadDataset(char * path)
 {
+    kCentersData data;
     FILE *stream = fopen(path, "r");
+
+    // check if file exists
+    if (stream == NULL)
+    {
+        printf("File could not be found");
+        exit(EXIT_FAILURE);
+    }
     
-    char *number
+    // count lines(n) and elements-per-line(dims)
+    data.n = 1;
+    data.dims = 1;
+
+    char *line = NULL;
+    size_t lineSize = 0; 
+    if (getline(&line, &lineSize, stream) == -1)    // check if file is empty
+    {
+        printf("File is empty");
+        exit(EXIT_FAILURE);
+    }
+    // find dims
+    char * ptr = strtok(line, ";");
+    while (ptr != NULL)
+    {
+        data.dims++;
+        ptr = strtok(NULL, ";");
+    }
+    // find n
+    while (getline(&line, &lineSize, stream) != EOF) // read till end of file
+        data.n++;
+
+    // reset pointer to begin of file
+    rewind(stream);
+
+    
+    int currentDim, ptId = 0;
+    // allocate array
+    data.fullNSize = data.n + simdVecSize - (data.n % simdVecSize);
+    data.P = aligned_alloc(simdAllignment, sizeof(float) * data.fullNSize * data.dims);
+    data.W = NULL;
+    
+    
+    while (getline(&line, &lineSize, stream) != EOF)
+    {
+        currentDim = 0;
+        ptr = strtok(line, ",");
+        while ((line != NULL) && (currentDim < data.dims))
+        {
+            data.P[ptId + currentDim * data.fullNSize] = atof(ptr);
+            ptr = strtok(NULL, ",");
+            currentDim++;
+        }
+        ptId++;
+    }
+
+    if (line)
+        free(line);
+
+    // now fill the remaining values with NaN
+    for (int i = data.n; i < data.fullNSize; i++)
+        for (int j = 0; j < data.dims; j++)
+            data.P[i + j * data.fullNSize] = nanf("");
+
+    return data;
 }
 
-void seqWeightedOutliers(float *points, int n, int dims, int k, int z, float alpha)
+kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alpha)
 {
-    int fullNSize = n + (n % simdVecSize);
-    float *allDistSquared = aligned_alloc(32, sizeof(float) * fullNSize * n);
-    
-    float *pt = aligned_alloc(32, sizeof(float) * dims);
-    for (int i = 0; i < n; i++)
-    {
-        // need to fill the array pt with the current point coordinates
-        for (int j = 0; j < dims; j++)
-            pt[j] = points[i + j * fullNSize];
-
-        fillDistanceMatrix(points, n, dims, pt, allDistSquared, i * fullNSize);
-    }
-    free(pt);
-
-
-
+    float * allDistSquared = computeDistanceMatrix(data);
+    //printMatrix(allDistSquared, data.n, data.fullNSize, false);
 
 
     free(allDistSquared);
 }
 
-void fillDistanceMatrixRow(float *points, int n, int dims, float *pt, float *distSquaredOut, int pos)
+float * computeDistanceMatrix(kCentersData data)
 {
-    int fullNSize = n + (n % simdVecSize);
-    __m256 squaredSum;
-    for (int i = 0; i < n; i += 8)
+    float * allDistSquared = aligned_alloc(simdAllignment, sizeof(float) * data.fullNSize * data.n);
+    __m256 squaredSum, diff;
+
+    for (int ptId = 0; ptId < data.n; ptId++)
     {
-        squaredSum = _mm256_setzero_ps();
-        for (int j = 0; j < dims; j++)
+        for (int i = 0; i < data.n; i += 8)
         {
-            __m256 diff = _mm256_sub_ps(_mm256_load_ps(&points[i + j * fullNSize]), _mm256_set1_ps(pt[j]));
-            diff = _mm256_mul_ps(diff, diff);
-            squaredSum = _mm256_add_ps(squaredSum, diff);
+            squaredSum = _mm256_setzero_ps();   // set to zero at beginning of the cummulative sum
+            for (int j = 0; j < data.dims; j++)
+            {
+                diff = _mm256_sub_ps(_mm256_load_ps(&data.P[i + j * data.fullNSize]), _mm256_set1_ps(data.P[ptId + j * data.fullNSize]));
+                diff = _mm256_mul_ps(diff, diff);
+                squaredSum = _mm256_add_ps(squaredSum, diff);
+            }
+            _mm256_store_ps(&allDistSquared[ptId * data.fullNSize + i], squaredSum);
         }
-        _mm256_store_ps(&distSquaredOut[pos + i], squaredSum);
+    }
+
+    return allDistSquared;    
+}
+
+float firstGuess(float * distances, int n, int dims, int ptToUse)
+{
+    int limit = ptToUse;
+    
+    if ((ptToUse > n) || (ptToUse <= 0))
+        limit = n;
+
+    int fullNSize = n + simdVecSize - (n % simdVecSize);
+    float min = distances[1];
+    for (int i = 1; i < ptToUse; i++)
+    {
+        /* code */
+    }
+    
+}
+
+void printMatrix(float * matr, int n, int m, bool isSimdOptimized)  // in this case only n are the rows while m are the columns
+{
+    int fullMSize = m;
+    if(isSimdOptimized)
+        fullMSize = m + simdVecSize - (m % simdVecSize);
+    for (int i = 0; i < n; i++)
+    {
+        for (int j = 0; j < m; j++)
+            printf("%.3f;  ", matr[j + i * fullMSize]);
+        printf("\n");
     }
 }
