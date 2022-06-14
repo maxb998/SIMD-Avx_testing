@@ -75,7 +75,9 @@ kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alph
 {
     float * allDistSquared = computeDistanceMatrix(data);
     //printMatrix(allDistSquared, data.n, data.fullNSize, false);
+    float initialGuess = firstGuess(allDistSquared, data.n, data.dims, z+k+1);
 
+    
 
     free(allDistSquared);
 }
@@ -106,17 +108,17 @@ float * computeDistanceMatrix(kCentersData data)
 float firstGuess(float * distances, int n, int dims, int ptToUse)
 {
     int limit = ptToUse;
-    
+    // make the use a different limit if the one provided isn't valid
     if ((ptToUse > n) || (ptToUse <= 0))
         limit = n;
 
     int fullNSize = n + simdVecSize - (n % simdVecSize);
     float min = distances[1];
     for (int i = 1; i < ptToUse; i++)
-    {
-        /* code */
-    }
-    
+        for (int j = i+1; j < ptToUse; j++)
+            if (distances[i * fullNSize + j] < min)
+                min = distances[i * fullNSize, j];
+    return min;
 }
 
 void printMatrix(float * matr, int n, int m, bool isSimdOptimized)  // in this case only n are the rows while m are the columns
