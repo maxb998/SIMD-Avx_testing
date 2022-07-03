@@ -24,6 +24,7 @@ kCentersData loadDataset(char * path);
 kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alpha);
 float * computeDistanceMatrix(kCentersData data);
 float firstGuess(float * distances, int n, int dims, int ptToUse);
+void loadUnitW(kCentersData * data);
 
 void printMatrix(float * matr, int n, int m, bool isSimdOptimized);
 

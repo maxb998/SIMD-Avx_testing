@@ -71,12 +71,25 @@ kCentersData loadDataset(char * path)
     return data;
 }
 
+void loadUnitW(kCentersData * data)
+{
+    data->W = aligned_alloc(simdAllignment, sizeof(int) * data->fullNSize);
+}
+
 kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alpha)
 {
     float * allDistSquared = computeDistanceMatrix(data);
     //printMatrix(allDistSquared, data.n, data.fullNSize, false);
     float initialGuess = firstGuess(allDistSquared, data.n, data.dims, z+k+1);
 
+    printf("Initial guess = %f\n", initialGuess);
+
+    kCentersSolution s;
+    s.dims = data.dims;
+    for (int i = 0; i < ; i++)
+    {
+        /* code */
+    }
     
 
     free(allDistSquared);
@@ -120,6 +133,8 @@ float firstGuess(float * distances, int n, int dims, int ptToUse)
                 min = distances[i * fullNSize, j];
     return min;
 }
+
+
 
 void printMatrix(float * matr, int n, int m, bool isSimdOptimized)  // in this case only n are the rows while m are the columns
 {
