@@ -73,7 +73,16 @@ kCentersData loadDataset(char * path)
 
 void loadUnitW(kCentersData * data)
 {
-    data->W = aligned_alloc(simdAllignment, sizeof(int) * data->fullNSize);
+    data->W = aligned_alloc(simdAllignment, sizeof(long) * data->fullNSize);
+    for (int i = 0; i < data->n; i++)
+        data->W[i] = 1L;
+    for (int i = data->n; i < data->fullNSize; i++)
+        data->W[i] = 0L;
+    
+    /*
+    for (int i = 0; i < data->fullNSize; i++)
+        printf("W[%d] = %d\n", i, data->W[i]);
+    //*/
 }
 
 kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alpha)
@@ -86,10 +95,34 @@ kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alph
 
     kCentersSolution s;
     s.dims = data.dims;
-    for (int i = 0; i < ; i++)
+    //s.S = (float*)aligned_alloc(simdAllignment, sizeof(float) * data.dims * k);
+
+    long solutionIDs[k];
+    long * currentW = (long)aligned_alloc(simdAllignment, sizeof(long) * data.fullNSize);
+    
+    long uncoveredW = 0L;
+    
+    do
     {
-        /* code */
-    }
+        // fill array of solutions with -1 in order to check how many centers are found
+        for (int i = 0; i < k; i++)
+            solutionIDs[i] = -1L;
+        // reset currentW to original weights
+        memcpy((void*)currentW, (void*)data.W, sizeof(long) * data.fullNSize);
+
+        // find centers
+        for (int center = 0; center < k; center++)
+        {
+            for (int i = 0; i < data.n; i++)
+            {
+                //if (currentW > (long)0) {}
+                
+            }
+        }
+        
+        
+        
+    } while (uncoveredW > (long)z);
     
 
     free(allDistSquared);

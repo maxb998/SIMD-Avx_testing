@@ -7,7 +7,11 @@ int main(int argc, char *argv[])
 
     
     kCentersData data = loadDataset(argv[1]);
+    loadUnitW(&data);
     seqWeightedOutliers(data, k, z, 0.);
+
+    free(data.P);
+    free(data.W);
 
     return EXIT_SUCCESS;
 }

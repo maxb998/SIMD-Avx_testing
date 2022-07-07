@@ -10,7 +10,7 @@
 typedef struct kCentersData
 {
     float * P;
-    int * W;
+    long * W;
     int n, dims, fullNSize;
 } kCentersData ;
 

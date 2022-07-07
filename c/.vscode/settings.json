@@ -59,6 +59,7 @@
         "streambuf": "cpp",
         "cinttypes": "cpp",
         "typeinfo": "cpp",
-        "kcentersoutliers.h": "c"
+        "kcentersoutliers.h": "c",
+        "string.h": "c"
     }
 }
