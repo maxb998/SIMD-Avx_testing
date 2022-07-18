@@ -10,7 +10,7 @@
 typedef struct kCentersData
 {
     float * P;
-    long * W;
+    int * W;
     int n, dims, fullNSize;
 } kCentersData ;
 
@@ -26,7 +26,7 @@ float * computeDistanceMatrix(kCentersData data);
 float firstGuess(float * distances, int n, int dims, int ptToUse);
 void loadUnitW(kCentersData * data);
 
-void printMatrix(float * matr, int n, int m, bool isSimdOptimized);
+void printMatrix(float * matr, int n, int m, bool issmidOptimized);
 
 
 #endif // KCENTERS_OUTLIERS_H

@@ -1,6 +1,6 @@
 #include "kCentersOutliers.h"
 
-const int simdVecSize = 8, simdAllignment = 32;
+const int smidVecSize = 8, smidAllignment = 32;
 
 kCentersData loadDataset(char * path)
 {
@@ -42,8 +42,8 @@ kCentersData loadDataset(char * path)
     
     int currentDim, ptId = 0;
     // allocate array
-    data.fullNSize = data.n + simdVecSize - (data.n % simdVecSize);
-    data.P = aligned_alloc(simdAllignment, sizeof(float) * data.fullNSize * data.dims);
+    data.fullNSize = data.n + smidVecSize - (data.n % smidVecSize);
+    data.P = aligned_alloc(smidAllignment, sizeof(float) * data.fullNSize * data.dims);
     data.W = NULL;
     
     
@@ -73,11 +73,11 @@ kCentersData loadDataset(char * path)
 
 void loadUnitW(kCentersData * data)
 {
-    data->W = aligned_alloc(simdAllignment, sizeof(long) * data->fullNSize);
+    data->W = (int*)aligned_alloc(smidAllignment, sizeof(int) * data->fullNSize);
     for (int i = 0; i < data->n; i++)
-        data->W[i] = 1L;
+        data->W[i] = 1;
     for (int i = data->n; i < data->fullNSize; i++)
-        data->W[i] = 0L;
+        data->W[i] = 0;
     
     /*
     for (int i = 0; i < data->fullNSize; i++)
@@ -95,42 +95,86 @@ kCentersSolution seqWeightedOutliers(kCentersData data, int k, int z, float alph
 
     kCentersSolution s;
     s.dims = data.dims;
-    //s.S = (float*)aligned_alloc(simdAllignment, sizeof(float) * data.dims * k);
+    //s.S = (float*)aligned_alloc(smidAllignment, sizeof(float) * data.dims * k);
 
-    long solutionIDs[k];
-    long * currentW = (long)aligned_alloc(simdAllignment, sizeof(long) * data.fullNSize);
+    int solutionIDs[k];
+    int * currentW = (int*)aligned_alloc(smidAllignment, sizeof(int) * data.fullNSize);
+
+    int * W8Sum = (int*)aligned_alloc(smidAllignment, sizeof(int) * smidVecSize);
     
-    long uncoveredW = 0L;
+    long uncoveredWSum = 0L;
+    int center;
     
+    int maxWSum, currWSum, newCenterID;
+
     do
     {
         // fill array of solutions with -1 in order to check how many centers are found
         for (int i = 0; i < k; i++)
-            solutionIDs[i] = -1L;
+            solutionIDs[i] = -1;
         // reset currentW to original weights
-        memcpy((void*)currentW, (void*)data.W, sizeof(long) * data.fullNSize);
+        memcpy((void*)currentW, (void*)data.W, sizeof(int) * data.fullNSize);
 
         // find centers
-        for (int center = 0; center < k; center++)
+        center = 0;
+        while (center < k)
         {
+            maxWSum = 0; currWSum = 0; newCenterID = -1;
+
             for (int i = 0; i < data.n; i++)
             {
-                //if (currentW > (long)0) {}
-                
+                // for each point calculate sum between all points that would be under that center inner radius
+                memset((void*)W8Sum, 0x00, sizeof(int) * smidVecSize);
+
+                for (int j = 0; j < data.n / smidVecSize; j += smidAllignment)
+                {
+                    __m256i mask = _mm256_cmpgt_epi32((__m256i)_mm256_load_ps((float*)))
+                }
+                // sum elements of array with 8 elems sum
+                currWSum = 0;
+                for (int j = 0; j < smidVecSize; j++)
+                    currWSum += W8Sum[j];
+
+                // check if better center has been found
+                if (maxWSum < currWSum)
+                {
+                    maxWSum = currWSum;
+                    newCenterID = i;
+                }
             }
+            
+            if (newCenterID == -1) break;   // no center has been found in this iteration -> all points have already been covered
+            
+            // set bigger radius to find new covered points
+
+
+            // set new covered points weight to 0
+
+
+            center++;
+        }
+
+        if (newCenterID == -1)  // all points have been convered before reaching k number of clusters -> algorithm has found the centers
+        {
+            s.S = (float*)malloc(sizeof(float) * (center + 1) * data.dims);
+            for (int i = 0; i < center; i++)
+                for (int dim = 0; dim < data.dims; dim++)
+                    s.S[i + dim * (center + 1)] = data.P[];
+            
+            break;
         }
         
         
-        
-    } while (uncoveredW > (long)z);
+    } while (uncoveredWSum > (long)z);
     
-
+    free(currentW);
+    free(W8Sum);
     free(allDistSquared);
 }
 
 float * computeDistanceMatrix(kCentersData data)
 {
-    float * allDistSquared = aligned_alloc(simdAllignment, sizeof(float) * data.fullNSize * data.n);
+    float * allDistSquared = aligned_alloc(smidAllignment, sizeof(float) * data.fullNSize * data.n);
     __m256 squaredSum, diff;
 
     for (int ptId = 0; ptId < data.n; ptId++)
@@ -158,7 +202,7 @@ float firstGuess(float * distances, int n, int dims, int ptToUse)
     if ((ptToUse > n) || (ptToUse <= 0))
         limit = n;
 
-    int fullNSize = n + simdVecSize - (n % simdVecSize);
+    int fullNSize = n + smidVecSize - (n % smidVecSize);
     float min = distances[1];
     for (int i = 1; i < ptToUse; i++)
         for (int j = i+1; j < ptToUse; j++)
@@ -169,11 +213,11 @@ float firstGuess(float * distances, int n, int dims, int ptToUse)
 
 
 
-void printMatrix(float * matr, int n, int m, bool isSimdOptimized)  // in this case only n are the rows while m are the columns
+void printMatrix(float * matr, int n, int m, bool issmidOptimized)  // in this case only n are the rows while m are the columns
 {
     int fullMSize = m;
-    if(isSimdOptimized)
-        fullMSize = m + simdVecSize - (m % simdVecSize);
+    if(issmidOptimized)
+        fullMSize = m + smidVecSize - (m % smidVecSize);
     for (int i = 0; i < n; i++)
     {
         for (int j = 0; j < m; j++)
